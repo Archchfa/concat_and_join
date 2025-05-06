@@ -31,7 +31,7 @@ if uploaded_files:
         buffer.seek(0)
 
         st.download_button(
-            label="\ud83d\udcc5 Скачать объединённый CSV",
+            label="Скачать объединённый CSV",
             data=buffer,
             file_name="combined.csv",
             mime="text/csv"
