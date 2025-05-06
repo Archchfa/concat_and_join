@@ -28,6 +28,8 @@ uploaded_files = st.file_uploader(
 
 output_filename = st.text_input("Введите имя для итогового файла (без расширения)", value="combined")
 
+combined_df = None
+
 if uploaded_files and output_filename:
     dfs = []
     for file in uploaded_files:
@@ -40,13 +42,12 @@ if uploaded_files and output_filename:
     if dfs:
         with st.spinner("🔄 Объединение файлов..."):
             combined_df = pd.concat(dfs, ignore_index=True)
-            time.sleep(1.5)  # Небольшая задержка для эффекта
+            time.sleep(1.5)
 
-        st.balloons()  # 🎈 Анимация успеха
+        st.balloons()
         st.success("✅ Файлы успешно объединены!")
         st.dataframe(combined_df.head())
 
-        # Подготовка файла для скачивания
         buffer = BytesIO()
         combined_df.to_csv(buffer, index=False)
         buffer.seek(0)
@@ -57,3 +58,39 @@ if uploaded_files and output_filename:
             file_name=f"{output_filename}.csv",
             mime="text/csv"
         )
+
+# --- Новый раздел: Поиск пересечений ---
+if combined_df is not None:
+    st.header("🔍 Ищем пересекающиеся значения")
+    new_file = st.file_uploader("Загрузите файл для сравнения", type="csv", key="compare")
+
+    if new_file is not None:
+        try:
+            compare_df = pd.read_csv(new_file)
+            st.success("Файл для сравнения успешно загружен!")
+
+            col1 = st.selectbox("Выберите столбец из объединённого файла", combined_df.columns)
+            col2 = st.selectbox("Выберите столбец из нового файла", compare_df.columns)
+
+            if st.button("🔎 Найти пересечения"):
+                intersection_values = pd.Series(list(set(combined_df[col1]) & set(compare_df[col2])))
+                percent = len(intersection_values) / len(compare_df[col2].dropna()) * 100
+                st.info(f"✅ Найдено {len(intersection_values)} пересечений — это {percent:.2f}% от столбца сравнения.")
+
+                # Отфильтровать строки с пересечениями
+                filtered_df = compare_df[compare_df[col2].isin(intersection_values)]
+                st.dataframe(filtered_df.head())
+
+                result_buffer = BytesIO()
+                filtered_df.to_csv(result_buffer, index=False)
+                result_buffer.seek(0)
+
+                st.download_button(
+                    label="⬇️ Скачать файл с пересечениями",
+                    data=result_buffer,
+                    file_name="intersected_rows.csv",
+                    mime="text/csv"
+                )
+
+        except Exception as e:
+            st.error(f"Ошибка при обработке файла: {e}")
