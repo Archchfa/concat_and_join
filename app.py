@@ -72,12 +72,13 @@ if combined_df is not None:
             col1 = st.selectbox("Выберите столбец из объединённого файла", combined_df.columns)
             col2 = st.selectbox("Выберите столбец из нового файла", compare_df.columns)
 
+            intersect_output_filename = st.text_input("Введите имя для файла с пересечениями (без расширения)", value="intersected_rows")
+
             if st.button("🔎 Найти пересечения"):
                 intersection_values = pd.Series(list(set(combined_df[col1]) & set(compare_df[col2])))
                 percent = len(intersection_values) / len(compare_df[col2].dropna()) * 100
                 st.info(f"✅ Найдено {len(intersection_values)} пересечений — это {percent:.2f}% от столбца сравнения.")
 
-                # Отфильтровать строки с пересечениями
                 filtered_df = compare_df[compare_df[col2].isin(intersection_values)]
                 st.dataframe(filtered_df.head())
 
@@ -88,7 +89,7 @@ if combined_df is not None:
                 st.download_button(
                     label="⬇️ Скачать файл с пересечениями",
                     data=result_buffer,
-                    file_name="intersected_rows.csv",
+                    file_name=f"{intersect_output_filename}.csv",
                     mime="text/csv"
                 )
 
