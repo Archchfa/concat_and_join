@@ -32,44 +32,32 @@ combined_df = None
 
 if uploaded_files and output_filename:
     dfs = []
-    common_columns = None
     for file in uploaded_files:
         try:
             df = pd.read_csv(file)
             dfs.append(df)
-            if common_columns is None:
-                common_columns = set(df.columns)
-            else:
-                common_columns &= set(df.columns)
         except Exception as e:
             st.error(f"Ошибка при чтении файла {file.name}: {e}")
 
-    if dfs and common_columns:
-        join_column = st.selectbox("Выберите столбец для объединения (общий во всех файлах)", sorted(list(common_columns)))
+    if dfs:
+        with st.spinner("🔄 Объединение файлов..."):
+            combined_df = pd.concat(dfs, ignore_index=True)
+            time.sleep(1.5)
 
-        if st.button("🔗 Объединить файлы"):
-            with st.spinner("🔄 Объединение файлов..."):
-                try:
-                    combined_df = pd.concat(dfs, ignore_index=True)
-                    combined_df = combined_df.dropna(subset=[join_column])
-                    time.sleep(1.5)
+        st.balloons()
+        st.success("✅ Файлы успешно объединены!")
+        st.dataframe(combined_df.head())
 
-                    st.balloons()
-                    st.success("✅ Файлы успешно объединены!")
-                    st.dataframe(combined_df.head())
+        buffer = BytesIO()
+        combined_df.to_csv(buffer, index=False)
+        buffer.seek(0)
 
-                    buffer = BytesIO()
-                    combined_df.to_csv(buffer, index=False)
-                    buffer.seek(0)
-
-                    st.download_button(
-                        label="⬇️ Скачать объединённый CSV",
-                        data=buffer,
-                        file_name=f"{output_filename}.csv",
-                        mime="text/csv"
-                    )
-                except Exception as e:
-                    st.error(f"Ошибка при объединении файлов: {e}")
+        st.download_button(
+            label="⬇️ Скачать объединённый CSV",
+            data=buffer,
+            file_name=f"{output_filename}.csv",
+            mime="text/csv"
+        )
 
 # --- Новый раздел: Поиск пересечений ---
 if combined_df is not None:
@@ -84,13 +72,12 @@ if combined_df is not None:
             col1 = st.selectbox("Выберите столбец из объединённого файла", combined_df.columns)
             col2 = st.selectbox("Выберите столбец из нового файла", compare_df.columns)
 
-            intersect_output_filename = st.text_input("Введите имя для файла с пересечениями (без расширения)", value="intersected_rows")
-
             if st.button("🔎 Найти пересечения"):
                 intersection_values = pd.Series(list(set(combined_df[col1]) & set(compare_df[col2])))
                 percent = len(intersection_values) / len(compare_df[col2].dropna()) * 100
                 st.info(f"✅ Найдено {len(intersection_values)} пересечений — это {percent:.2f}% от столбца сравнения.")
 
+                # Отфильтровать строки с пересечениями
                 filtered_df = compare_df[compare_df[col2].isin(intersection_values)]
                 st.dataframe(filtered_df.head())
 
@@ -101,7 +88,7 @@ if combined_df is not None:
                 st.download_button(
                     label="⬇️ Скачать файл с пересечениями",
                     data=result_buffer,
-                    file_name=f"{intersect_output_filename}.csv",
+                    file_name="intersected_rows.csv",
                     mime="text/csv"
                 )
 
