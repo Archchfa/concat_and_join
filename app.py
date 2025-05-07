@@ -5,7 +5,7 @@ import time
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Объединение CSV", layout="centered")
-st.title("✨ Объединение CSV-файлов")
+st.title("Объединение CSV-файлов")
 
 # Визуальный эффект заголовка
 components.html("""
