@@ -5,7 +5,7 @@ import time
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Объединение CSV", layout="centered")
-st.title("Объединение CSV-файлов")
+st.title("✨ Объединение CSV-файлов")
 
 # Визуальный эффект заголовка
 components.html("""
@@ -32,32 +32,44 @@ combined_df = None
 
 if uploaded_files and output_filename:
     dfs = []
+    common_columns = None
     for file in uploaded_files:
         try:
             df = pd.read_csv(file)
             dfs.append(df)
+            if common_columns is None:
+                common_columns = set(df.columns)
+            else:
+                common_columns &= set(df.columns)
         except Exception as e:
             st.error(f"Ошибка при чтении файла {file.name}: {e}")
 
-    if dfs:
-        with st.spinner("🔄 Объединение файлов..."):
-            combined_df = pd.concat(dfs, ignore_index=True)
-            time.sleep(1.5)
+    if dfs and common_columns:
+        join_column = st.selectbox("Выберите столбец для объединения (общий во всех файлах)", sorted(list(common_columns)))
 
-        st.balloons()
-        st.success("✅ Файлы успешно объединены!")
-        st.dataframe(combined_df.head())
+        if st.button("🔗 Объединить файлы"):
+            with st.spinner("🔄 Объединение файлов..."):
+                try:
+                    combined_df = pd.concat(dfs, ignore_index=True)
+                    combined_df = combined_df.dropna(subset=[join_column])
+                    time.sleep(1.5)
 
-        buffer = BytesIO()
-        combined_df.to_csv(buffer, index=False)
-        buffer.seek(0)
+                    st.balloons()
+                    st.success("✅ Файлы успешно объединены!")
+                    st.dataframe(combined_df.head())
 
-        st.download_button(
-            label="⬇️ Скачать объединённый CSV",
-            data=buffer,
-            file_name=f"{output_filename}.csv",
-            mime="text/csv"
-        )
+                    buffer = BytesIO()
+                    combined_df.to_csv(buffer, index=False)
+                    buffer.seek(0)
+
+                    st.download_button(
+                        label="⬇️ Скачать объединённый CSV",
+                        data=buffer,
+                        file_name=f"{output_filename}.csv",
+                        mime="text/csv"
+                    )
+                except Exception as e:
+                    st.error(f"Ошибка при объединении файлов: {e}")
 
 # --- Новый раздел: Поиск пересечений ---
 if combined_df is not None:
