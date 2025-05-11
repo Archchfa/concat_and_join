@@ -29,8 +29,10 @@ def detect_column_type(series):
         except ValueError:
             return "string"
 
-def filter_dataframe(df, method):
-    if method == "Поиск по значениям":
+def filter_dataframe():
+    uploaded_file = st.file_uploader("Загрузите CSV файл для фильтрации", type="csv", key="filter_file")
+    if uploaded_file:
+        df = load_csv(uploaded_file)
         search_type = st.radio("Выберите способ поиска:", ["Ввести вручную", "Загрузить файл со значениями", "По условию"])
 
         if search_type == "Ввести вручную":
@@ -81,7 +83,9 @@ def filter_dataframe(df, method):
             else:
                 selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
                 return df[df[column].astype(str).isin(selected)]
-    return df
+
+        st.warning("Выберите метод фильтрации и условия")
+    return None
 
 def download_link(df, filename="результат.csv"):
     buffer = BytesIO()
@@ -132,14 +136,8 @@ if option == "Объединить файлы":
         download_link(merged_df, "объединенные_файлы.csv")
 
 elif option == "Фильтрация данных":
-    if 'data' not in st.session_state:
-        uploaded = st.file_uploader("Загрузите CSV файл", type="csv")
-        if uploaded:
-            df = load_csv(uploaded)
-            st.session_state['data'] = df
-    if 'data' in st.session_state:
-        df = st.session_state['data']
-        filtered_df = filter_dataframe(df, method="Поиск по значениям")
+    filtered_df = filter_dataframe()
+    if filtered_df is not None:
         st.dataframe(filtered_df)
         st.session_state['filtered'] = filtered_df
         download_link(filtered_df, "отфильтрованные_данные.csv")
