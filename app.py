@@ -33,59 +33,89 @@ def filter_dataframe():
     uploaded_file = st.file_uploader("Загрузите CSV файл для фильтрации", type="csv", key="filter_file")
     if uploaded_file:
         df = load_csv(uploaded_file)
+        search_type = st.radio("Выберите способ поиска:", ["Ввести вручную", "Загрузить файл со значениями", "По условию"])
 
-        if 'filters' not in st.session_state:
-            st.session_state['filters'] = []  # Сохраняем список фильтров
-
-        filters = st.session_state['filters']
-        
-        add_condition = True
-        while add_condition:
-            # Выбор столбца
-            column = st.selectbox("Выберите столбец", df.columns, key=f"column_{len(filters)}")
+        if search_type == "Ввести вручную":
+            column = st.selectbox("Выберите столбец для поиска", df.columns)
             col_type = detect_column_type(df[column])
+            if col_type == "string":
+                selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
+                return df[df[column].astype(str).isin(selected)]
+            else:
+                values = st.text_input("Введите значения через запятую:").split(',')
+                values = [v.strip() for v in values if v.strip()]
+                return df[df[column].astype(str).isin(values)]
+
+        elif search_type == "Загрузить файл со значениями":
+            uploaded = st.file_uploader("Загрузите файл со значениями", type="csv", key="value_file")
+            if uploaded:
+                value_df = load_csv(uploaded)
+                value_col = st.selectbox("Выберите столбец со значениями", value_df.columns)
+                target_col = st.selectbox("Выберите столбец для поиска в основном файле", df.columns)
+                return df[df[target_col].astype(str).isin(value_df[value_col].astype(str))]
+
+        elif search_type == "По условию":
+            column = st.selectbox("Выберите столбец", df.columns)
+            col_type = detect_column_type(df[column])
+
+            logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0)
+            df[column] = df[column].copy()  # Предосторожность при последующих преобразованиях
+
+            filters = []
 
             if col_type == "datetime":
                 df[column] = pd.to_datetime(df[column], errors='coerce')
                 min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
-                start, end = st.date_input("Выберите диапазон дат", [min_date, max_date], key=f"date_{len(filters)}")
+                start, end = st.date_input("Выберите диапазон дат", [min_date, max_date])
                 filters.append((df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end)))
+
             elif col_type == "numeric":
-                condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="], key=f"condition_{len(filters)}")
-                value = st.text_input(f"Введите значение для {column}", key=f"value_{len(filters)}")
-                if value:
+                condition1 = st.selectbox("Условие 1", ["=", "<", ">", "<=", ">="])
+                value1 = st.text_input("Значение 1")
+                condition2 = st.selectbox("Условие 2 (опционально)", ["Нет", "=", "<", ">", "<=", ">="])
+                value2 = st.text_input("Значение 2")
+
+                if value1:
                     try:
-                        value = float(value)
-                        if condition == "=":
-                            filters.append(df[column] == value)
-                        elif condition == "<":
-                            filters.append(df[column] < value)
-                        elif condition == ">":
-                            filters.append(df[column] > value)
-                        elif condition == "<=":
-                            filters.append(df[column] <= value)
-                        elif condition == ">=":
-                            filters.append(df[column] >= value)
+                        value1 = float(value1)
+                        if condition1 == "=":
+                            filters.append(df[column] == value1)
+                        elif condition1 == "<":
+                            filters.append(df[column] < value1)
+                        elif condition1 == ">":
+                            filters.append(df[column] > value1)
+                        elif condition1 == "<=":
+                            filters.append(df[column] <= value1)
+                        elif condition1 == ">=":
+                            filters.append(df[column] >= value1)
                     except ValueError:
-                        st.warning(f"Введите корректное числовое значение для {column}")
+                        st.warning("Введите корректное числовое значение для первого условия")
+
+                if condition2 != "Нет" and value2:
+                    try:
+                        value2 = float(value2)
+                        if condition2 == "=":
+                            filters.append(df[column] == value2)
+                        elif condition2 == "<":
+                            filters.append(df[column] < value2)
+                        elif condition2 == ">":
+                            filters.append(df[column] > value2)
+                        elif condition2 == "<=":
+                            filters.append(df[column] <= value2)
+                        elif condition2 == ">=":
+                            filters.append(df[column] >= value2)
+                    except ValueError:
+                        st.warning("Введите корректное числовое значение для второго условия")
+
             else:
-                selected = st.multiselect(f"Выберите значения для {column}", sorted(df[column].dropna().unique().astype(str)), key=f"selected_{len(filters)}")
+                selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
                 filters.append(df[column].astype(str).isin(selected))
 
-            # Кнопка для добавления нового условия
-            add_condition = st.button("Добавить условие", key=f"add_condition_{len(filters)}")
-            if not add_condition:
-                break
-
-        st.session_state['filters'] = filters
-
-        if filters:
-            # Применение всех условий
-            combined_filter = filters[0]
-            for i in range(1, len(filters)):
-                combined_filter &= filters[i]
-
-            return df[combined_filter]
+            if filters:
+                if logic_op == "И":
+                    return df[pd.concat(filters, axis=1).all(axis=1)]
+                else:
+                    return df[pd.concat(filters, axis=1).any(axis=1)]
 
         st.warning("Выберите метод фильтрации и условия")
     return None
