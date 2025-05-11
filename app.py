@@ -33,9 +33,15 @@ def filter_dataframe():
     uploaded_file = st.file_uploader("Загрузите CSV файл для фильтрации", type="csv", key="filter_file")
     if uploaded_file:
         df = load_csv(uploaded_file)
-        filters = []
-        operators = []  # Список для логических операторов
+        
+        if 'filters' not in st.session_state:
+            st.session_state['filters'] = []  # Сохраняем список фильтров
+        if 'operators' not in st.session_state:
+            st.session_state['operators'] = []  # Сохраняем список операторов
 
+        filters = st.session_state['filters']
+        operators = st.session_state['operators']
+        
         add_condition = True
         while add_condition:
             # Выбор столбца
@@ -78,6 +84,9 @@ def filter_dataframe():
             add_condition = st.button("Добавить условие", key=f"add_condition_{len(filters)}")
             if not add_condition:
                 break
+
+        st.session_state['filters'] = filters
+        st.session_state['operators'] = operators
 
         if filters:
             # Применение логического оператора к фильтрам
