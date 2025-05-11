@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from io import BytesIO
 
 st.set_page_config(page_title="Анализ CSV файлов", layout="wide")
@@ -12,6 +13,10 @@ st.markdown("<style>div[data-testid='stNotification'] {display: none;}</style>",
 # --- Функции ---
 def load_csv(uploaded_file):
     return pd.read_csv(uploaded_file)
+
+def merge_files(files):
+    dfs = [load_csv(file) for file in files]
+    return pd.concat(dfs, ignore_index=True)
 
 def detect_column_type(series):
     try:
@@ -94,14 +99,53 @@ def download_link(df, filename="результат.csv"):
     buffer.seek(0)
     st.download_button("📥 Скачать результат", buffer, file_name=filename, mime="text/csv")
 
+def plot_data(df):
+    st.subheader("📈 Построение графика")
+    
+    chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
+    x_col = st.selectbox("Ось X (категории)", df.columns)
+    y_col = st.selectbox("Ось Y (значения)", df.columns) if chart_type != "Круговая диаграмма" else None
+    
+    # Добавим возможность выбора дополнительных параметров
+    color_col = st.selectbox("Цветовая категория", df.columns) if chart_type not in ["Круговая диаграмма"] else None
+    agg_type = st.selectbox("Тип агрегации", ["Количество уникальных", "Общее количество"])
+
+    if agg_type == "Количество уникальных":
+        data = df.groupby(x_col)[y_col].nunique().reset_index(name="Значение") if y_col else df[x_col].value_counts().reset_index(name="Значение")
+    else:
+        data = df.groupby(x_col)[y_col].count().reset_index(name="Значение") if y_col else df[x_col].value_counts().reset_index(name="Значение")
+
+    fig = None
+    if chart_type == "Гистограмма":
+        fig = px.histogram(df, x=x_col)
+    elif chart_type == "Столбчатая диаграмма":
+        fig = px.bar(data, x=x_col, y="Значение", color=color_col)
+    elif chart_type == "Линейный график":
+        fig = px.line(data, x=x_col, y="Значение", color=color_col)
+    elif chart_type == "Круговая диаграмма":
+        fig = px.pie(data, names="index" if "index" in data.columns else x_col, values="Значение")
+
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
+
 # --- Основная логика ---
 st.sidebar.header("Выберите действие")
 option = st.sidebar.radio("", [
+    "Объединить файлы",
     "Фильтрация данных",
-    "Построить график"
+    "Построить график",
+    "Построить график из одного файла"
 ])
 
-if option == "Фильтрация данных":
+if option == "Объединить файлы":
+    uploaded_files = st.file_uploader("Загрузите CSV файлы для объединения", type="csv", accept_multiple_files=True)
+    if uploaded_files:
+        merged_df = merge_files(uploaded_files)
+        st.dataframe(merged_df)
+        st.session_state['data'] = merged_df
+        download_link(merged_df, "объединенные_файлы.csv")
+
+elif option == "Фильтрация данных":
     filtered_df = filter_dataframe()
     if filtered_df is not None:
         st.dataframe(filtered_df)
@@ -110,29 +154,14 @@ if option == "Фильтрация данных":
 
 elif option == "Построить график":
     if 'filtered' in st.session_state:
-        df = st.session_state['filtered']
-        st.subheader("📈 Построение графика")
-        chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
-        x_col = st.selectbox("Ось X (категории)", df.columns)
-        y_col = st.selectbox("Ось Y (значения)", df.columns) if chart_type != "Круговая диаграмма" else None
+        plot_data(st.session_state['filtered'])
+    elif 'data' in st.session_state:
+        plot_data(st.session_state['data'])
+    else:
+        st.warning("Сначала загрузите или объедините данные")
 
-        color_col = st.selectbox("Цветовая категория", df.columns) if chart_type not in ["Круговая диаграмма"] else None
-        agg_type = st.selectbox("Тип агрегации", ["Количество уникальных", "Общее количество"])
-
-        if agg_type == "Количество уникальных":
-            data = df.groupby(x_col)[y_col].nunique().reset_index(name="Значение") if y_col else df[x_col].value_counts().reset_index(name="Значение")
-        else:
-            data = df.groupby(x_col)[y_col].count().reset_index(name="Значение") if y_col else df[x_col].value_counts().reset_index(name="Значение")
-
-        fig = None
-        if chart_type == "Гистограмма":
-            fig = px.histogram(df, x=x_col)
-        elif chart_type == "Столбчатая диаграмма":
-            fig = px.bar(data, x=x_col, y="Значение", color=color_col)
-        elif chart_type == "Линейный график":
-            fig = px.line(data, x=x_col, y="Значение", color=color_col)
-        elif chart_type == "Круговая диаграмма":
-            fig = px.pie(data, names="index" if "index" in data.columns else x_col, values="Значение")
-
-        if fig:
-            st.plotly_chart(fig, use_container_width=True)
+elif option == "Построить график из одного файла":
+    uploaded_file = st.file_uploader("Загрузите CSV файл для визуализации", type="csv")
+    if uploaded_file:
+        df = load_csv(uploaded_file)
+        plot_data(df)
