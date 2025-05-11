@@ -60,17 +60,17 @@ def filter_dataframe():
             add_condition = True
 
             while add_condition:
-                column = st.selectbox("Выберите столбец", df.columns)
+                column = st.selectbox("Выберите столбец", df.columns, key=f"column_{len(filters)}")
                 col_type = detect_column_type(df[column])
 
                 if col_type == "datetime":
                     df[column] = pd.to_datetime(df[column], errors='coerce')
                     min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
-                    start, end = st.date_input("Выберите диапазон дат", [min_date, max_date])
+                    start, end = st.date_input("Выберите диапазон дат", [min_date, max_date], key=f"date_{len(filters)}")
                     filters.append((df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end)))
                 elif col_type == "numeric":
-                    condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="])
-                    value = st.text_input(f"Введите значение для {column}")
+                    condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="], key=f"condition_{len(filters)}")
+                    value = st.text_input(f"Введите значение для {column}", key=f"value_{len(filters)}")
                     if value:
                         try:
                             value = float(value)
@@ -87,7 +87,7 @@ def filter_dataframe():
                         except ValueError:
                             st.warning(f"Введите корректное числовое значение для {column}")
                 else:
-                    selected = st.multiselect(f"Выберите значения для {column}", sorted(df[column].dropna().unique().astype(str)))
+                    selected = st.multiselect(f"Выберите значения для {column}", sorted(df[column].dropna().unique().astype(str)), key=f"selected_{len(filters)}")
                     filters.append(df[column].astype(str).isin(selected))
 
                 # Запрашиваем логический оператор для следующего условия
