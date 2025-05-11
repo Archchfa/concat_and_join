@@ -55,61 +55,50 @@ def filter_dataframe():
                 return df[df[target_col].astype(str).isin(value_df[value_col].astype(str))]
 
         elif search_type == "По условию":
-            column = st.selectbox("Выберите столбец", df.columns)
-            col_type = detect_column_type(df[column])
-
-            logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0)
-            df[column] = df[column].copy()  # Предосторожность при последующих преобразованиях
-
             filters = []
+            logic_op = None
+            first_condition = True
 
-            if col_type == "datetime":
-                df[column] = pd.to_datetime(df[column], errors='coerce')
-                min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
-                start, end = st.date_input("Выберите диапазон дат", [min_date, max_date])
-                filters.append((df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end)))
+            while True:
+                column = st.selectbox("Выберите столбец", df.columns, key=f"column_{first_condition}")
+                col_type = detect_column_type(df[column])
 
-            elif col_type == "numeric":
-                condition1 = st.selectbox("Условие 1", ["=", "<", ">", "<=", ">="])
-                value1 = st.text_input("Значение 1")
-                condition2 = st.selectbox("Условие 2 (опционально)", ["Нет", "=", "<", ">", "<=", ">="])
-                value2 = st.text_input("Значение 2")
+                if col_type == "datetime":
+                    df[column] = pd.to_datetime(df[column], errors='coerce')
+                    min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
+                    start, end = st.date_input("Выберите диапазон дат", [min_date, max_date], key=f"date_{first_condition}")
+                    filters.append((df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end)))
 
-                if value1:
-                    try:
-                        value1 = float(value1)
-                        if condition1 == "=":
-                            filters.append(df[column] == value1)
-                        elif condition1 == "<":
-                            filters.append(df[column] < value1)
-                        elif condition1 == ">":
-                            filters.append(df[column] > value1)
-                        elif condition1 == "<=":
-                            filters.append(df[column] <= value1)
-                        elif condition1 == ">=":
-                            filters.append(df[column] >= value1)
-                    except ValueError:
-                        st.warning("Введите корректное числовое значение для первого условия")
+                elif col_type == "numeric":
+                    condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="], key=f"condition_{first_condition}")
+                    value = st.text_input(f"Введите значение для {column}", key=f"value_{first_condition}")
+                    if value:
+                        try:
+                            value = float(value)
+                            if condition == "=":
+                                filters.append(df[column] == value)
+                            elif condition == "<":
+                                filters.append(df[column] < value)
+                            elif condition == ">":
+                                filters.append(df[column] > value)
+                            elif condition == "<=":
+                                filters.append(df[column] <= value)
+                            elif condition == ">=":
+                                filters.append(df[column] >= value)
+                        except ValueError:
+                            st.warning(f"Введите корректное числовое значение для {column}")
+                else:
+                    selected = st.multiselect(f"Выберите значения для {column}", sorted(df[column].dropna().unique().astype(str)), key=f"select_{first_condition}")
+                    filters.append(df[column].astype(str).isin(selected))
 
-                if condition2 != "Нет" and value2:
-                    try:
-                        value2 = float(value2)
-                        if condition2 == "=":
-                            filters.append(df[column] == value2)
-                        elif condition2 == "<":
-                            filters.append(df[column] < value2)
-                        elif condition2 == ">":
-                            filters.append(df[column] > value2)
-                        elif condition2 == "<=":
-                            filters.append(df[column] <= value2)
-                        elif condition2 == ">=":
-                            filters.append(df[column] >= value2)
-                    except ValueError:
-                        st.warning("Введите корректное числовое значение для второго условия")
+                if not first_condition:
+                    logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0, key=f"logic_{first_condition}")
 
-            else:
-                selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
-                filters.append(df[column].astype(str).isin(selected))
+                add_condition = st.button("Добавить условие", key=f"add_{first_condition}")
+                if not add_condition:
+                    break
+
+                first_condition = False
 
             if filters:
                 if logic_op == "И":
