@@ -57,32 +57,65 @@ def filter_dataframe():
         elif search_type == "По условию":
             column = st.selectbox("Выберите столбец", df.columns)
             col_type = detect_column_type(df[column])
+
+            logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0)
+            df[column] = df[column].copy()  # Предосторожность при последующих преобразованиях
+
+            filters = []
+
             if col_type == "datetime":
                 df[column] = pd.to_datetime(df[column], errors='coerce')
                 min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
                 start, end = st.date_input("Выберите диапазон дат", [min_date, max_date])
-                return df[(df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end))]
+                filters.append((df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end)))
+
             elif col_type == "numeric":
-                condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="])
-                value = st.text_input("Введите значение")
-                if value:
+                condition1 = st.selectbox("Условие 1", ["=", "<", ">", "<=", ">="])
+                value1 = st.text_input("Значение 1")
+                condition2 = st.selectbox("Условие 2 (опционально)", ["Нет", "=", "<", ">", "<=", ">="])
+                value2 = st.text_input("Значение 2")
+
+                if value1:
                     try:
-                        value = float(value)
-                        if condition == "=":
-                            return df[df[column] == value]
-                        elif condition == "<":
-                            return df[df[column] < value]
-                        elif condition == ">":
-                            return df[df[column] > value]
-                        elif condition == "<=":
-                            return df[df[column] <= value]
-                        elif condition == ">=":
-                            return df[df[column] >= value]
+                        value1 = float(value1)
+                        if condition1 == "=":
+                            filters.append(df[column] == value1)
+                        elif condition1 == "<":
+                            filters.append(df[column] < value1)
+                        elif condition1 == ">":
+                            filters.append(df[column] > value1)
+                        elif condition1 == "<=":
+                            filters.append(df[column] <= value1)
+                        elif condition1 == ">=":
+                            filters.append(df[column] >= value1)
                     except ValueError:
-                        st.warning("Введите числовое значение")
+                        st.warning("Введите корректное числовое значение для первого условия")
+
+                if condition2 != "Нет" and value2:
+                    try:
+                        value2 = float(value2)
+                        if condition2 == "=":
+                            filters.append(df[column] == value2)
+                        elif condition2 == "<":
+                            filters.append(df[column] < value2)
+                        elif condition2 == ">":
+                            filters.append(df[column] > value2)
+                        elif condition2 == "<=":
+                            filters.append(df[column] <= value2)
+                        elif condition2 == ">=":
+                            filters.append(df[column] >= value2)
+                    except ValueError:
+                        st.warning("Введите корректное числовое значение для второго условия")
+
             else:
                 selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
-                return df[df[column].astype(str).isin(selected)]
+                filters.append(df[column].astype(str).isin(selected))
+
+            if filters:
+                if logic_op == "И":
+                    return df[pd.concat(filters, axis=1).all(axis=1)]
+                else:
+                    return df[pd.concat(filters, axis=1).any(axis=1)]
 
         st.warning("Выберите метод фильтрации и условия")
     return None
@@ -95,9 +128,14 @@ def download_link(df, filename="результат.csv"):
 
 def plot_data(df):
     st.subheader("📈 Построение графика")
-    chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
+    
+    chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма", "Точечная диаграмма", "График рассеяния"])
     x_col = st.selectbox("Ось X (категории)", df.columns)
     y_col = st.selectbox("Ось Y (значения)", df.columns) if chart_type != "Круговая диаграмма" else None
+    
+    # Добавим возможность выбора дополнительных параметров
+    color_col = st.selectbox("Цветовая категория", df.columns) if chart_type not in ["Круговая диаграмма"] else None
+    size_col = st.selectbox("Размер точки (для точечных графиков)", df.columns) if chart_type == "Точечная диаграмма" else None
     agg_type = st.selectbox("Тип агрегации", ["Количество уникальных", "Общее количество"])
 
     if agg_type == "Количество уникальных":
@@ -109,11 +147,15 @@ def plot_data(df):
     if chart_type == "Гистограмма":
         fig = px.histogram(df, x=x_col)
     elif chart_type == "Столбчатая диаграмма":
-        fig = px.bar(data, x=x_col, y="Значение")
+        fig = px.bar(data, x=x_col, y="Значение", color=color_col)
     elif chart_type == "Линейный график":
-        fig = px.line(data, x=x_col, y="Значение")
+        fig = px.line(data, x=x_col, y="Значение", color=color_col)
     elif chart_type == "Круговая диаграмма":
         fig = px.pie(data, names="index" if "index" in data.columns else x_col, values="Значение")
+    elif chart_type == "Точечная диаграмма":
+        fig = px.scatter(data, x=x_col, y="Значение", size=size_col, color=color_col)
+    elif chart_type == "График рассеяния":
+        fig = px.scatter(data, x=x_col, y="Значение", color=color_col, size=size_col)
 
     if fig:
         st.plotly_chart(fig, use_container_width=True)
