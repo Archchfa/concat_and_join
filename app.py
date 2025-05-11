@@ -56,21 +56,21 @@ def filter_dataframe():
 
         elif search_type == "По условию":
             filters = []
-            logic_op = None
-            first_condition = True
-            while True:
-                column = st.selectbox("Выберите столбец", df.columns, key=f"column_{first_condition}")
+            logic_op = "И"  # Начальный логический оператор
+            add_condition = True
+
+            while add_condition:
+                column = st.selectbox("Выберите столбец", df.columns)
                 col_type = detect_column_type(df[column])
 
                 if col_type == "datetime":
                     df[column] = pd.to_datetime(df[column], errors='coerce')
                     min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
-                    start, end = st.date_input("Выберите диапазон дат", [min_date, max_date], key=f"date_{first_condition}")
+                    start, end = st.date_input("Выберите диапазон дат", [min_date, max_date])
                     filters.append((df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end)))
-
                 elif col_type == "numeric":
-                    condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="], key=f"condition_{first_condition}")
-                    value = st.text_input(f"Введите значение для {column}", key=f"value_{first_condition}")
+                    condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="])
+                    value = st.text_input(f"Введите значение для {column}")
                     if value:
                         try:
                             value = float(value)
@@ -87,20 +87,17 @@ def filter_dataframe():
                         except ValueError:
                             st.warning(f"Введите корректное числовое значение для {column}")
                 else:
-                    selected = st.multiselect(f"Выберите значения для {column}", sorted(df[column].dropna().unique().astype(str)), key=f"select_{first_condition}")
+                    selected = st.multiselect(f"Выберите значения для {column}", sorted(df[column].dropna().unique().astype(str)))
                     filters.append(df[column].astype(str).isin(selected))
 
-                if not first_condition:
-                    logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0, key=f"logic_{first_condition}")
+                # Запрашиваем логический оператор для следующего условия
+                logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0, key=f"logic_{len(filters)}")
 
-                add_condition = st.button("Добавить условие", key=f"add_{first_condition}")
+                add_condition = st.button("Добавить условие", key=f"add_condition_{len(filters)}")
                 if not add_condition:
                     break
 
-                first_condition = False
-
             if filters:
-                # Применяем логический оператор "И" или "ИЛИ" к объединённым условиям
                 if logic_op == "И":
                     return df[pd.concat(filters, axis=1).all(axis=1)]
                 else:
