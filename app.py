@@ -58,7 +58,6 @@ def filter_dataframe():
             filters = []
             logic_op = None
             first_condition = True
-
             while True:
                 column = st.selectbox("Выберите столбец", df.columns, key=f"column_{first_condition}")
                 col_type = detect_column_type(df[column])
@@ -101,6 +100,7 @@ def filter_dataframe():
                 first_condition = False
 
             if filters:
+                # Применяем логический оператор "И" или "ИЛИ" к объединённым условиям
                 if logic_op == "И":
                     return df[pd.concat(filters, axis=1).all(axis=1)]
                 else:
