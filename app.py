@@ -5,7 +5,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Анализ CSV файлов", layout="wide")
 
-st.title("\U0001F4CA Инструмент для анализа CSV файлов")
+st.title("📊 Инструмент для анализа CSV файлов")
 
 # Убираем анимации
 st.markdown("<style>div[data-testid='stNotification'] {display: none;}</style>", unsafe_allow_html=True)
@@ -18,15 +18,31 @@ def merge_files(files):
     dfs = [load_csv(file) for file in files]
     return pd.concat(dfs, ignore_index=True)
 
+def detect_column_type(series):
+    try:
+        pd.to_datetime(series)
+        return "datetime"
+    except (ValueError, TypeError):
+        try:
+            pd.to_numeric(series)
+            return "numeric"
+        except ValueError:
+            return "string"
+
 def filter_dataframe(df, method):
     if method == "Поиск по значениям":
         search_type = st.radio("Выберите способ поиска:", ["Ввести вручную", "Загрузить файл со значениями", "По условию"])
 
         if search_type == "Ввести вручную":
             column = st.selectbox("Выберите столбец для поиска", df.columns)
-            values = st.text_input("Введите значения через запятую:").split(',')
-            values = [v.strip() for v in values if v.strip()]
-            return df[df[column].astype(str).isin(values)]
+            col_type = detect_column_type(df[column])
+            if col_type == "string":
+                selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
+                return df[df[column].astype(str).isin(selected)]
+            else:
+                values = st.text_input("Введите значения через запятую:").split(',')
+                values = [v.strip() for v in values if v.strip()]
+                return df[df[column].astype(str).isin(values)]
 
         elif search_type == "Загрузить файл со значениями":
             uploaded = st.file_uploader("Загрузите файл со значениями", type="csv", key="value_file")
@@ -38,42 +54,52 @@ def filter_dataframe(df, method):
 
         elif search_type == "По условию":
             column = st.selectbox("Выберите столбец", df.columns)
-            condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="])
-            value = st.text_input("Введите значение")
-            if value:
-                try:
-                    value = float(value)
-                    if condition == "=":
-                        return df[df[column] == value]
-                    elif condition == "<":
-                        return df[df[column] < value]
-                    elif condition == ">":
-                        return df[df[column] > value]
-                    elif condition == "<=":
-                        return df[df[column] <= value]
-                    elif condition == ">=":
-                        return df[df[column] >= value]
-                except ValueError:
-                    st.warning("Введите числовое значение")
+            col_type = detect_column_type(df[column])
+            if col_type == "datetime":
+                df[column] = pd.to_datetime(df[column], errors='coerce')
+                min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
+                start, end = st.date_input("Выберите диапазон дат", [min_date, max_date])
+                return df[(df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end))]
+            elif col_type == "numeric":
+                condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="])
+                value = st.text_input("Введите значение")
+                if value:
+                    try:
+                        value = float(value)
+                        if condition == "=":
+                            return df[df[column] == value]
+                        elif condition == "<":
+                            return df[df[column] < value]
+                        elif condition == ">":
+                            return df[df[column] > value]
+                        elif condition == "<=":
+                            return df[df[column] <= value]
+                        elif condition == ">=":
+                            return df[df[column] >= value]
+                    except ValueError:
+                        st.warning("Введите числовое значение")
+            else:
+                selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
+                return df[df[column].astype(str).isin(selected)]
     return df
 
 def download_link(df, filename="результат.csv"):
     buffer = BytesIO()
     df.to_csv(buffer, index=False)
     buffer.seek(0)
-    st.download_button("\U0001F4E5 Скачать результат", buffer, file_name=filename, mime="text/csv")
+    st.download_button("📥 Скачать результат", buffer, file_name=filename, mime="text/csv")
 
 def plot_data(df):
-    st.subheader("\U0001F4C8 Построение графика")
-    chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график"])
+    st.subheader("📈 Построение графика")
+    chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
     x_col = st.selectbox("Ось X (категории)", df.columns)
-    y_col = st.selectbox("Ось Y (значения)", df.columns)
+    y_col = st.selectbox("Ось Y (значения)", df.columns) if chart_type != "Круговая диаграмма" else None
     agg_type = st.selectbox("Тип агрегации", ["Количество уникальных", "Общее количество"])
 
     if agg_type == "Количество уникальных":
-        data = df.groupby(x_col)[y_col].nunique().reset_index(name="Значение")
+        data = df.groupby(x_col)[y_col].nunique().reset_index(name="Значение") if y_col else df[x_col].value_counts().reset_index(name="Значение")
     else:
-        data = df.groupby(x_col)[y_col].count().reset_index(name="Значение")
+        data = df.groupby(x_col)[y_col].count().reset_index(name="Значение") if y_col else df[x_col].value_counts().reset_index(name="Значение")
 
     fig = None
     if chart_type == "Гистограмма":
@@ -82,6 +108,8 @@ def plot_data(df):
         fig = px.bar(data, x=x_col, y="Значение")
     elif chart_type == "Линейный график":
         fig = px.line(data, x=x_col, y="Значение")
+    elif chart_type == "Круговая диаграмма":
+        fig = px.pie(data, names="index" if "index" in data.columns else x_col, values="Значение")
 
     if fig:
         st.plotly_chart(fig, use_container_width=True)
@@ -91,7 +119,8 @@ st.sidebar.header("Выберите действие")
 option = st.sidebar.radio("", [
     "Объединить файлы",
     "Фильтрация данных",
-    "Построить график"
+    "Построить график",
+    "Построить график из одного файла"
 ])
 
 if option == "Объединить файлы":
@@ -122,3 +151,9 @@ elif option == "Построить график":
         plot_data(st.session_state['data'])
     else:
         st.warning("Сначала загрузите или объедините данные")
+
+elif option == "Построить график из одного файла":
+    uploaded_file = st.file_uploader("Загрузите CSV файл для визуализации", type="csv")
+    if uploaded_file:
+        df = load_csv(uploaded_file)
+        plot_data(df)
