@@ -34,9 +34,33 @@ def filter_dataframe():
     if uploaded_file:
         df = load_csv(uploaded_file)
         filter_conditions = []
-        logic_ops = []
 
-        # Добавление условий
+        # Добавление первого условия
+        column = st.selectbox("Выберите столбец для фильтрации", df.columns)
+        operation = st.selectbox("Выберите логический оператор", ["=", "<", ">", "<=", ">="])
+        value = st.text_input("Введите значение для первого условия")
+        
+        if value:
+            col_type = detect_column_type(df[column])
+
+            # Преобразование значения в числовой формат, если нужно
+            if col_type == "numeric" and value.replace('.', '', 1).isdigit():
+                value = float(value)
+
+            if operation == "=":
+                filter_conditions.append(df[column] == value)
+            elif operation == "<":
+                filter_conditions.append(df[column] < value)
+            elif operation == ">":
+                filter_conditions.append(df[column] > value)
+            elif operation == "<=":
+                filter_conditions.append(df[column] <= value)
+            elif operation == ">=":
+                filter_conditions.append(df[column] >= value)
+
+            st.write(f"Добавлено условие: {column} {operation} {value}")
+
+        # Добавление логического оператора
         add_condition = st.button("Добавить условие")
         
         if 'filter_blocks' not in st.session_state:
@@ -48,6 +72,7 @@ def filter_dataframe():
                 'column': st.selectbox("Выберите столбец для фильтрации", df.columns),
                 'operation': st.selectbox("Выберите логический оператор", ["=", "<", ">", "<=", ">="]),
                 'value': st.text_input("Введите значение для условия"),
+                'logic_op': st.selectbox("Логический оператор для объединения", ["И", "ИЛИ"], index=0),
             })
 
         for block in st.session_state['filter_blocks']:
@@ -71,16 +96,18 @@ def filter_dataframe():
                 elif operation == ">=":
                     filter_conditions.append(df[column] >= value)
 
-        # Соединение условий с логическими операторами
+                # Логический оператор для объединения условий
+                logic_op = block['logic_op']
+                if logic_op == "И":
+                    df_filtered = df[pd.concat(filter_conditions, axis=1).all(axis=1)]
+                else:
+                    df_filtered = df[pd.concat(filter_conditions, axis=1).any(axis=1)]
+
+            st.write(f"Добавлено условие: {column} {operation} {value}")
+
         if filter_conditions:
-            logic_op = st.selectbox("Логический оператор для объединения условий", ["И", "ИЛИ"], index=0)
-            if logic_op == "И":
-                df_filtered = df[pd.concat(filter_conditions, axis=1).all(axis=1)]
-            else:
-                df_filtered = df[pd.concat(filter_conditions, axis=1).any(axis=1)]
             st.dataframe(df_filtered)
             return df_filtered
-
     return None
 
 def download_link(df, filename="результат.csv"):
