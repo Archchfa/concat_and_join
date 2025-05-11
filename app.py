@@ -33,14 +33,11 @@ def filter_dataframe():
     uploaded_file = st.file_uploader("Загрузите CSV файл для фильтрации", type="csv", key="filter_file")
     if uploaded_file:
         df = load_csv(uploaded_file)
-        
+
         if 'filters' not in st.session_state:
             st.session_state['filters'] = []  # Сохраняем список фильтров
-        if 'operators' not in st.session_state:
-            st.session_state['operators'] = []  # Сохраняем список операторов
 
         filters = st.session_state['filters']
-        operators = st.session_state['operators']
         
         add_condition = True
         while add_condition:
@@ -75,27 +72,18 @@ def filter_dataframe():
                 selected = st.multiselect(f"Выберите значения для {column}", sorted(df[column].dropna().unique().astype(str)), key=f"selected_{len(filters)}")
                 filters.append(df[column].astype(str).isin(selected))
 
-            # Добавление логического оператора
-            if len(filters) > 1:
-                logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0, key=f"logic_{len(filters)}")
-                operators.append(logic_op)
-
             # Кнопка для добавления нового условия
             add_condition = st.button("Добавить условие", key=f"add_condition_{len(filters)}")
             if not add_condition:
                 break
 
         st.session_state['filters'] = filters
-        st.session_state['operators'] = operators
 
         if filters:
-            # Применение логического оператора к фильтрам
+            # Применение всех условий
             combined_filter = filters[0]
             for i in range(1, len(filters)):
-                if operators[i-1] == "И":
-                    combined_filter &= filters[i]
-                else:
-                    combined_filter |= filters[i]
+                combined_filter &= filters[i]
 
             return df[combined_filter]
 
