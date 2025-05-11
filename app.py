@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.express as px
 from io import BytesIO
 
 st.set_page_config(page_title="Анализ CSV файлов", layout="wide")
@@ -71,19 +71,20 @@ def plot_data(df):
     agg_type = st.selectbox("Тип агрегации", ["Количество уникальных", "Общее количество"])
 
     if agg_type == "Количество уникальных":
-        data = df.groupby(x_col)[y_col].nunique()
+        data = df.groupby(x_col)[y_col].nunique().reset_index(name="Значение")
     else:
-        data = df.groupby(x_col)[y_col].count()
+        data = df.groupby(x_col)[y_col].count().reset_index(name="Значение")
 
-    fig, ax = plt.subplots()
+    fig = None
     if chart_type == "Гистограмма":
-        data.plot(kind='hist', ax=ax)
+        fig = px.histogram(df, x=x_col)
     elif chart_type == "Столбчатая диаграмма":
-        data.plot(kind='bar', ax=ax)
+        fig = px.bar(data, x=x_col, y="Значение")
     elif chart_type == "Линейный график":
-        data.plot(kind='line', ax=ax)
+        fig = px.line(data, x=x_col, y="Значение")
 
-    st.pyplot(fig)
+    if fig:
+        st.plotly_chart(fig, use_container_width=True)
 
 # --- Основная логика ---
 st.sidebar.header("Выберите действие")
