@@ -1,98 +1,123 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
 from io import BytesIO
-import time
-import streamlit.components.v1 as components
 
-st.set_page_config(page_title="Объединение CSV", layout="centered")
-st.title("✨ Объединение CSV-файлов")
+st.set_page_config(page_title="Анализ CSV файлов", layout="wide")
 
-# Визуальный эффект заголовка
-components.html("""
-    <style>
-        h1 {
-            animation: glow 1.5s infinite alternate;
-        }
-        @keyframes glow {
-            from { text-shadow: 0 0 10px #00c3ff; }
-            to { text-shadow: 0 0 20px #00c3ff, 0 0 30px #00c3ff; }
-        }
-    </style>
-""", height=0)
+st.title("\U0001F4CA Инструмент для анализа CSV файлов")
 
-uploaded_files = st.file_uploader(
-    "Загрузите CSV-файлы для объединения", 
-    type="csv", 
-    accept_multiple_files=True
-)
+# Убираем анимации
+st.markdown("<style>div[data-testid='stNotification'] {display: none;}</style>", unsafe_allow_html=True)
 
-output_filename = st.text_input("Введите имя для итогового файла (без расширения)", value="combined")
+# --- Функции ---
+def load_csv(uploaded_file):
+    return pd.read_csv(uploaded_file)
 
-combined_df = None
+def merge_files(files):
+    dfs = [load_csv(file) for file in files]
+    return pd.concat(dfs, ignore_index=True)
 
-if uploaded_files and output_filename:
-    dfs = []
-    for file in uploaded_files:
-        try:
-            df = pd.read_csv(file)
-            dfs.append(df)
-        except Exception as e:
-            st.error(f"Ошибка при чтении файла {file.name}: {e}")
+def filter_dataframe(df, method):
+    if method == "Поиск по значениям":
+        search_type = st.radio("Выберите способ поиска:", ["Ввести вручную", "Загрузить файл со значениями", "По условию"])
 
-    if dfs:
-        with st.spinner("🔄 Объединение файлов..."):
-            combined_df = pd.concat(dfs, ignore_index=True)
-            time.sleep(1.5)
+        if search_type == "Ввести вручную":
+            column = st.selectbox("Выберите столбец для поиска", df.columns)
+            values = st.text_input("Введите значения через запятую:").split(',')
+            values = [v.strip() for v in values if v.strip()]
+            return df[df[column].astype(str).isin(values)]
 
-        st.balloons()
-        st.success("✅ Файлы успешно объединены!")
-        st.dataframe(combined_df.head())
+        elif search_type == "Загрузить файл со значениями":
+            uploaded = st.file_uploader("Загрузите файл со значениями", type="csv", key="value_file")
+            if uploaded:
+                value_df = load_csv(uploaded)
+                value_col = st.selectbox("Выберите столбец со значениями", value_df.columns)
+                target_col = st.selectbox("Выберите столбец для поиска в основном файле", df.columns)
+                return df[df[target_col].astype(str).isin(value_df[value_col].astype(str))]
 
-        buffer = BytesIO()
-        combined_df.to_csv(buffer, index=False)
-        buffer.seek(0)
+        elif search_type == "По условию":
+            column = st.selectbox("Выберите столбец", df.columns)
+            condition = st.selectbox("Выберите условие", ["=", "<", ">", "<=", ">="])
+            value = st.text_input("Введите значение")
+            if value:
+                try:
+                    value = float(value)
+                    if condition == "=":
+                        return df[df[column] == value]
+                    elif condition == "<":
+                        return df[df[column] < value]
+                    elif condition == ">":
+                        return df[df[column] > value]
+                    elif condition == "<=":
+                        return df[df[column] <= value]
+                    elif condition == ">=":
+                        return df[df[column] >= value]
+                except ValueError:
+                    st.warning("Введите числовое значение")
+    return df
 
-        st.download_button(
-            label="⬇️ Скачать объединённый CSV",
-            data=buffer,
-            file_name=f"{output_filename}.csv",
-            mime="text/csv"
-        )
+def download_link(df, filename="результат.csv"):
+    buffer = BytesIO()
+    df.to_csv(buffer, index=False)
+    buffer.seek(0)
+    st.download_button("\U0001F4E5 Скачать результат", buffer, file_name=filename, mime="text/csv")
 
-# --- Новый раздел: Поиск пересечений ---
-if combined_df is not None:
-    st.header("🔍 Ищем пересекающиеся значения")
-    new_file = st.file_uploader("Загрузите файл для сравнения", type="csv", key="compare")
+def plot_data(df):
+    st.subheader("\U0001F4C8 Построение графика")
+    chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график"])
+    x_col = st.selectbox("Ось X (категории)", df.columns)
+    y_col = st.selectbox("Ось Y (значения)", df.columns)
+    agg_type = st.selectbox("Тип агрегации", ["Количество уникальных", "Общее количество"])
 
-    if new_file is not None:
-        try:
-            compare_df = pd.read_csv(new_file)
-            st.success("Файл для сравнения успешно загружен!")
+    if agg_type == "Количество уникальных":
+        data = df.groupby(x_col)[y_col].nunique()
+    else:
+        data = df.groupby(x_col)[y_col].count()
 
-            col1 = st.selectbox("Выберите столбец из объединённого файла", combined_df.columns)
-            col2 = st.selectbox("Выберите столбец из нового файла", compare_df.columns)
+    fig, ax = plt.subplots()
+    if chart_type == "Гистограмма":
+        data.plot(kind='hist', ax=ax)
+    elif chart_type == "Столбчатая диаграмма":
+        data.plot(kind='bar', ax=ax)
+    elif chart_type == "Линейный график":
+        data.plot(kind='line', ax=ax)
 
-            if st.button("🔎 Найти пересечения"):
-                intersection_values = pd.Series(list(set(combined_df[col1]) & set(compare_df[col2])))
-                percent = len(intersection_values) / len(combined_df[col1].dropna()) * 100
-                st.info(f"✅ Найдено {len(intersection_values)} пересечений — это {percent:.2f}% от столбца объединённого файла.")
+    st.pyplot(fig)
 
-                # Отфильтровать строки с пересечениями
-                filtered_df = compare_df[compare_df[col2].isin(intersection_values)]
-                st.dataframe(filtered_df.head())
+# --- Основная логика ---
+st.sidebar.header("Выберите действие")
+option = st.sidebar.radio("", [
+    "Объединить файлы",
+    "Фильтрация данных",
+    "Построить график"
+])
 
-                intersect_output_filename = st.text_input("Введите имя для файла с пересечениями (без расширения)", value="intersected_rows")
+if option == "Объединить файлы":
+    uploaded_files = st.file_uploader("Загрузите CSV файлы для объединения", type="csv", accept_multiple_files=True)
+    if uploaded_files:
+        merged_df = merge_files(uploaded_files)
+        st.dataframe(merged_df)
+        st.session_state['data'] = merged_df
+        download_link(merged_df, "объединенные_файлы.csv")
 
-                result_buffer = BytesIO()
-                filtered_df.to_csv(result_buffer, index=False)
-                result_buffer.seek(0)
+elif option == "Фильтрация данных":
+    if 'data' not in st.session_state:
+        uploaded = st.file_uploader("Загрузите CSV файл", type="csv")
+        if uploaded:
+            df = load_csv(uploaded)
+            st.session_state['data'] = df
+    if 'data' in st.session_state:
+        df = st.session_state['data']
+        filtered_df = filter_dataframe(df, method="Поиск по значениям")
+        st.dataframe(filtered_df)
+        st.session_state['filtered'] = filtered_df
+        download_link(filtered_df, "отфильтрованные_данные.csv")
 
-                st.download_button(
-                    label="⬇️ Скачать файл с пересечениями",
-                    data=result_buffer,
-                    file_name=f"{intersect_output_filename}.csv",
-                    mime="text/csv"
-                )
-
-        except Exception as e:
-            st.error(f"Ошибка при обработке файла: {e}")
+elif option == "Построить график":
+    if 'filtered' in st.session_state:
+        plot_data(st.session_state['filtered'])
+    elif 'data' in st.session_state:
+        plot_data(st.session_state['data'])
+    else:
+        st.warning("Сначала загрузите или объедините данные")
