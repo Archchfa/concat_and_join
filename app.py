@@ -84,42 +84,29 @@ def filter_dataframe():
         elif search_type == "По условию":
             column = st.selectbox("Выберите столбец", df.columns)
             col_type = detect_column_type(df[column])
-            logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0)
             df[column] = df[column].copy()
-            filters = []
 
             if col_type == "datetime":
                 df[column] = pd.to_datetime(df[column], errors='coerce')
                 min_date, max_date = pd.to_datetime(df[column].min()), pd.to_datetime(df[column].max())
                 start, end = st.date_input("Выберите диапазон дат", [min_date, max_date])
-                filters.append((df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end)))
-            elif col_type == "numeric":
-                condition1 = st.selectbox("Условие 1", ["=", "<", ">", "<=", ">="])
-                value1 = st.text_input("Значение 1")
-                condition2 = st.selectbox("Условие 2 (опционально)", ["Нет", "=", "<", ">", "<=", ">="])
-                value2 = st.text_input("Значение 2")
+                return df[(df[column] >= pd.to_datetime(start)) & (df[column] <= pd.to_datetime(end))]
 
-                if value1:
+            elif col_type == "numeric":
+                operator = st.selectbox("Оператор", ["=", "<", ">", "<=", ">="])
+                value = st.text_input("Значение")
+                if value:
                     try:
-                        value1 = float(value1)
-                        filters.append(eval(f"df[column] {condition1} value1"))
+                        value = float(value)
+                        return df[eval(f"df[column] {operator} value")]
                     except:
-                        st.warning("Некорректное значение 1")
-                if condition2 != "Нет" and value2:
-                    try:
-                        value2 = float(value2)
-                        filters.append(eval(f"df[column] {condition2} value2"))
-                    except:
-                        st.warning("Некорректное значение 2")
+                        st.warning("Некорректное значение")
+                return df
+
             else:
                 selected = st.multiselect("Выберите значения", sorted(df[column].dropna().unique().astype(str)))
-                filters.append(df[column].astype(str).isin(selected))
+                return df[df[column].astype(str).isin(selected)]
 
-            if filters:
-                if logic_op == "И":
-                    return df[pd.concat(filters, axis=1).all(axis=1)]
-                else:
-                    return df[pd.concat(filters, axis=1).any(axis=1)]
         st.warning("Выберите метод фильтрации и условия")
     return None
 
@@ -131,57 +118,41 @@ def download_link(df, filename="результат.csv"):
 
 def plot_data(df):
     st.subheader("📈 Построение графика")
-
     chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
     
-    group_by_cols = st.multiselect("Выберите столбцы для группировки", df.columns, max_selections=2)
-    agg_func = st.selectbox("Функция агрегации", ["count", "sum", "mean", "nunique"])
+    group_columns = st.multiselect("Выберите поля для группировки", df.columns)
+    value_column = st.selectbox("Выберите числовой столбец для агрегации", df.select_dtypes(include='number').columns)
+    agg_func = st.selectbox("Тип агрегации", ["Сумма", "Среднее", "Количество"])
 
-    if agg_func != "count":
-        value_col = st.selectbox("Столбец значений (Y)", df.columns)
+    if group_columns and value_column:
+        if agg_func == "Сумма":
+            data = df.groupby(group_columns)[value_column].sum().reset_index(name="Значение")
+        elif agg_func == "Среднее":
+            data = df.groupby(group_columns)[value_column].mean().reset_index(name="Значение")
+        else:
+            data = df.groupby(group_columns)[value_column].count().reset_index(name="Значение")
     else:
-        value_col = None
-
-    # Обработка дат
-    for col in group_by_cols:
-        if detect_column_type(df[col]) == "datetime":
-            df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
-
-    if group_by_cols:
-        try:
-            if agg_func == "count":
-                data = df.groupby(group_by_cols).size().reset_index(name="Значение")
-            else:
-                grouped = df.groupby(group_by_cols)[value_col]
-                if agg_func == "sum":
-                    data = grouped.sum(numeric_only=True).reset_index(name="Значение")
-                elif agg_func == "mean":
-                    data = grouped.mean(numeric_only=True).reset_index(name="Значение")
-                elif agg_func == "nunique":
-                    data = grouped.nunique().reset_index(name="Значение")
-        except Exception as e:
-            st.error(f"Ошибка агрегации: {e}")
-            return
-    else:
-        st.warning("Выберите хотя бы один столбец для группировки")
+        st.warning("Не выбраны данные для группировки")
         return
 
-    color_col = group_by_cols[1] if len(group_by_cols) > 1 else None
+    color_col = None
+    if len(group_columns) > 1:
+        color_col = st.selectbox("Категория цвета (группировка по цвету)", group_columns)
 
     fig = None
     if chart_type == "Гистограмма":
-        fig = px.histogram(data, x=group_by_cols[0], y="Значение", color=color_col)
+        fig = px.histogram(data, x=group_columns[0], y="Значение", color=color_col)
     elif chart_type == "Столбчатая диаграмма":
-        fig = px.bar(data, x=group_by_cols[0], y="Значение", color=color_col, barmode="group")
+        fig = px.bar(data, x=group_columns[0], y="Значение", color=color_col)
     elif chart_type == "Линейный график":
-        fig = px.line(data, x=group_by_cols[0], y="Значение", color=color_col)
+        fig = px.line(data, x=group_columns[0], y="Значение", color=color_col)
     elif chart_type == "Круговая диаграмма":
-        fig = px.pie(data, names=group_by_cols[0], values="Значение")
+        fig = px.pie(data, names=group_columns[0], values="Значение")
 
     if fig:
         st.plotly_chart(fig, use_container_width=True)
 
-# Основной интерфейс
+# Интерфейс
 st.sidebar.header("Выберите действие")
 option = st.sidebar.radio("", [
     "Объединить файлы",
