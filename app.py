@@ -142,13 +142,12 @@ def plot_data(df):
         st.plotly_chart(fig, use_container_width=True)
 
 # Интерфейс
-st.sidebar.header("Выберите действие")
-option = st.sidebar.radio("", [
+option = st.sidebar.radio("Выберите раздел", [
     "Объединить файлы",
     "Фильтрация данных",
     "Построить график",
     "График из одного файла"
-])
+], key="menu_option")
 
 if option == "Объединить файлы":
     uploaded_files = st.file_uploader("Загрузите CSV файлы", type="csv", accept_multiple_files=True)
