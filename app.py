@@ -7,16 +7,18 @@ st.set_page_config(page_title="Анализ CSV файлов", layout="wide")
 
 st.title("📊 Инструмент для анализа CSV файлов")
 
-# Убираем анимации
 st.markdown("<style>div[data-testid='stNotification'] {display: none;}</style>", unsafe_allow_html=True)
 
 # --- Функции ---
 def load_csv(uploaded_file):
     return pd.read_csv(uploaded_file)
 
-def merge_files(files):
+def merge_files(files, merge_on):
     dfs = [load_csv(file) for file in files]
-    return pd.concat(dfs, ignore_index=True)
+    merged_df = dfs[0]
+    for df in dfs[1:]:
+        merged_df = pd.merge(merged_df, df, on=merge_on, how="outer")
+    return merged_df
 
 def detect_column_type(series):
     try:
@@ -59,7 +61,7 @@ def filter_dataframe():
             col_type = detect_column_type(df[column])
 
             logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0)
-            df[column] = df[column].copy()  # Предосторожность при последующих преобразованиях
+            df[column] = df[column].copy()
 
             filters = []
 
@@ -128,12 +130,10 @@ def download_link(df, filename="результат.csv"):
 
 def plot_data(df):
     st.subheader("📈 Построение графика")
-    
+
     chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
     x_col = st.selectbox("Ось X (категории)", df.columns)
     y_col = st.selectbox("Ось Y (значения)", df.columns) if chart_type != "Круговая диаграмма" else None
-    
-    # Добавим возможность выбора дополнительных параметров
     color_col = st.selectbox("Цветовая категория", df.columns) if chart_type not in ["Круговая диаграмма"] else None
     agg_type = st.selectbox("Тип агрегации", ["Количество уникальных", "Общее количество"])
 
@@ -166,11 +166,24 @@ option = st.sidebar.radio("", [
 
 if option == "Объединить файлы":
     uploaded_files = st.file_uploader("Загрузите CSV файлы для объединения", type="csv", accept_multiple_files=True)
-    if uploaded_files:
-        merged_df = merge_files(uploaded_files)
-        st.dataframe(merged_df)
-        st.session_state['data'] = merged_df
-        download_link(merged_df, "объединенные_файлы.csv")
+
+    if uploaded_files and len(uploaded_files) >= 2:
+        st.info("Выберите столбец, по которому нужно объединять. Он должен присутствовать во всех файлах.")
+        
+        sample_df = load_csv(uploaded_files[0])
+        merge_column = st.selectbox("Выберите столбец для объединения", sample_df.columns)
+
+        if st.button("Объединить файлы"):
+            try:
+                merged_df = merge_files(uploaded_files, merge_column)
+                st.success("Файлы успешно объединены")
+                st.dataframe(merged_df)
+                st.session_state['data'] = merged_df
+                download_link(merged_df, "объединенные_по_столбцу.csv")
+            except Exception as e:
+                st.error(f"Ошибка при объединении: {e}")
+    elif uploaded_files:
+        st.warning("Загрузите минимум два файла для объединения.")
 
 elif option == "Фильтрация данных":
     filtered_df = filter_dataframe()
