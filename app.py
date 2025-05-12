@@ -135,49 +135,53 @@ def plot_data(df):
     chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
     
     group_by_cols = st.multiselect("Выберите столбцы для группировки", df.columns, max_selections=2)
-    value_col = st.selectbox("Столбец значений (Y)", df.columns, index=0) if chart_type != "Круговая диаграмма" else None
-    
     agg_func = st.selectbox("Функция агрегации", ["count", "sum", "mean", "nunique"])
-    
-    color_col = None
-    if len(group_by_cols) == 2:
-        color_col = group_by_cols[1]
-    
-    if group_by_cols and value_col:
+
+    if agg_func != "count":
+        value_col = st.selectbox("Столбец значений (Y)", df.columns)
+    else:
+        value_col = None
+
+    # Обработка дат
+    for col in group_by_cols:
+        if detect_column_type(df[col]) == "datetime":
+            df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+
+    if group_by_cols:
         try:
-            grouped = df.groupby(group_by_cols)[value_col]
             if agg_func == "count":
-                data = grouped.count().reset_index(name="Значение")
-            elif agg_func == "sum":
-                data = grouped.sum(numeric_only=True).reset_index(name="Значение")
-            elif agg_func == "mean":
-                data = grouped.mean(numeric_only=True).reset_index(name="Значение")
-            elif agg_func == "nunique":
-                data = grouped.nunique().reset_index(name="Значение")
+                data = df.groupby(group_by_cols).size().reset_index(name="Значение")
+            else:
+                grouped = df.groupby(group_by_cols)[value_col]
+                if agg_func == "sum":
+                    data = grouped.sum(numeric_only=True).reset_index(name="Значение")
+                elif agg_func == "mean":
+                    data = grouped.mean(numeric_only=True).reset_index(name="Значение")
+                elif agg_func == "nunique":
+                    data = grouped.nunique().reset_index(name="Значение")
         except Exception as e:
             st.error(f"Ошибка агрегации: {e}")
             return
-    elif group_by_cols:
-        data = df[group_by_cols].value_counts().reset_index(name="Значение")
     else:
         st.warning("Выберите хотя бы один столбец для группировки")
         return
 
+    color_col = group_by_cols[1] if len(group_by_cols) > 1 else None
+
     fig = None
     if chart_type == "Гистограмма":
-        fig = px.histogram(df, x=group_by_cols[0])
+        fig = px.histogram(data, x=group_by_cols[0], y="Значение", color=color_col)
     elif chart_type == "Столбчатая диаграмма":
-        fig = px.bar(data, x=group_by_cols[0], y="Значение", color=color_col)
+        fig = px.bar(data, x=group_by_cols[0], y="Значение", color=color_col, barmode="group")
     elif chart_type == "Линейный график":
         fig = px.line(data, x=group_by_cols[0], y="Значение", color=color_col)
     elif chart_type == "Круговая диаграмма":
-        pie_labels = group_by_cols[0] if group_by_cols else df.columns[0]
-        fig = px.pie(data, names=pie_labels, values="Значение")
+        fig = px.pie(data, names=group_by_cols[0], values="Значение")
 
     if fig:
         st.plotly_chart(fig, use_container_width=True)
 
-# Интерфейс
+# Основной интерфейс
 st.sidebar.header("Выберите действие")
 option = st.sidebar.radio("", [
     "Объединить файлы",
