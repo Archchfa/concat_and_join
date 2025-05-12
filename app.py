@@ -4,17 +4,31 @@ import plotly.express as px
 from io import BytesIO
 
 st.set_page_config(page_title="Анализ CSV файлов", layout="wide")
-
 st.title("📊 Инструмент для анализа CSV файлов")
-
 st.markdown("<style>div[data-testid='stNotification'] {display: none;}</style>", unsafe_allow_html=True)
 
 # --- Функции ---
 def load_csv(uploaded_file):
-    return pd.read_csv(uploaded_file)
+    try:
+        return pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8')
+    except Exception as e:
+        st.error(f"Ошибка при чтении файла {uploaded_file.name}: {e}")
+        return pd.DataFrame()
 
 def merge_files(files, merge_on):
-    dfs = [load_csv(file) for file in files]
+    dfs = []
+    for file in files:
+        df = load_csv(file)
+        if df.empty:
+            st.warning(f"Файл {file.name} пустой или содержит ошибки. Пропущен.")
+            continue
+        if merge_on not in df.columns:
+            st.warning(f"В файле {file.name} нет столбца '{merge_on}'. Пропущен.")
+            continue
+        dfs.append(df)
+    if len(dfs) < 2:
+        st.error("Недостаточно файлов с нужным столбцом для объединения.")
+        return pd.DataFrame()
     merged_df = dfs[0]
     for df in dfs[1:]:
         merged_df = pd.merge(merged_df, df, on=merge_on, how="outer")
@@ -35,8 +49,10 @@ def filter_dataframe():
     uploaded_file = st.file_uploader("Загрузите CSV файл для фильтрации", type="csv", key="filter_file")
     if uploaded_file:
         df = load_csv(uploaded_file)
-        search_type = st.radio("Выберите способ поиска:", ["Ввести вручную", "Загрузить файл со значениями", "По условию"])
+        if df.empty:
+            return None
 
+        search_type = st.radio("Выберите способ поиска:", ["Ввести вручную", "Загрузить файл со значениями", "По условию"])
         if search_type == "Ввести вручную":
             column = st.selectbox("Выберите столбец для поиска", df.columns)
             col_type = detect_column_type(df[column])
@@ -59,10 +75,8 @@ def filter_dataframe():
         elif search_type == "По условию":
             column = st.selectbox("Выберите столбец", df.columns)
             col_type = detect_column_type(df[column])
-
             logic_op = st.selectbox("Логический оператор", ["И", "ИЛИ"], index=0)
             df[column] = df[column].copy()
-
             filters = []
 
             if col_type == "datetime":
@@ -118,7 +132,6 @@ def filter_dataframe():
                     return df[pd.concat(filters, axis=1).all(axis=1)]
                 else:
                     return df[pd.concat(filters, axis=1).any(axis=1)]
-
         st.warning("Выберите метод фильтрации и условия")
     return None
 
@@ -130,7 +143,6 @@ def download_link(df, filename="результат.csv"):
 
 def plot_data(df):
     st.subheader("📈 Построение графика")
-
     chart_type = st.selectbox("Тип графика", ["Гистограмма", "Столбчатая диаграмма", "Линейный график", "Круговая диаграмма"])
     x_col = st.selectbox("Ось X (категории)", df.columns)
     y_col = st.selectbox("Ось Y (значения)", df.columns) if chart_type != "Круговая диаграмма" else None
@@ -166,24 +178,15 @@ option = st.sidebar.radio("", [
 
 if option == "Объединить файлы":
     uploaded_files = st.file_uploader("Загрузите CSV файлы для объединения", type="csv", accept_multiple_files=True)
-
-    if uploaded_files and len(uploaded_files) >= 2:
-        st.info("Выберите столбец, по которому нужно объединять. Он должен присутствовать во всех файлах.")
-        
-        sample_df = load_csv(uploaded_files[0])
-        merge_column = st.selectbox("Выберите столбец для объединения", sample_df.columns)
-
-        if st.button("Объединить файлы"):
-            try:
-                merged_df = merge_files(uploaded_files, merge_column)
-                st.success("Файлы успешно объединены")
+    if uploaded_files:
+        preview_file = load_csv(uploaded_files[0])
+        if not preview_file.empty:
+            merge_column = st.selectbox("Выберите столбец для объединения", preview_file.columns)
+            merged_df = merge_files(uploaded_files, merge_column)
+            if not merged_df.empty:
                 st.dataframe(merged_df)
                 st.session_state['data'] = merged_df
-                download_link(merged_df, "объединенные_по_столбцу.csv")
-            except Exception as e:
-                st.error(f"Ошибка при объединении: {e}")
-    elif uploaded_files:
-        st.warning("Загрузите минимум два файла для объединения.")
+                download_link(merged_df, "объединенные_файлы.csv")
 
 elif option == "Фильтрация данных":
     filtered_df = filter_dataframe()
@@ -204,4 +207,5 @@ elif option == "Построить график из одного файла":
     uploaded_file = st.file_uploader("Загрузите CSV файл для визуализации", type="csv")
     if uploaded_file:
         df = load_csv(uploaded_file)
-        plot_data(df)
+        if not df.empty:
+            plot_data(df)
