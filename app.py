@@ -120,7 +120,7 @@ def plot_data(df):
         st.warning("Выберите хотя бы одну колонку для группировки")
         return
 
-    # Преобразование дат к формату ГГГГ-ММ-ДД
+    # Преобразование дат к формату YYYY-MM-DD
     for col in group_by:
         if detect_column_type(df[col]) == "datetime":
             df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
@@ -136,8 +136,9 @@ def plot_data(df):
 
     fig = None
     color = group_by[1] if len(group_by) > 1 else None
+
     if chart_type == "Столбчатая диаграмма":
-        fig = px.bar(grouped, x=group_by[0], y=value_col, color=color)
+        fig = px.bar(grouped, x=group_by[0], y=value_col, color=color, barmode='group')
     elif chart_type == "Линейный график":
         fig = px.line(grouped, x=group_by[0], y=value_col, color=color)
     elif chart_type == "Круговая диаграмма":
