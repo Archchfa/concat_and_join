@@ -39,7 +39,7 @@ def merge_files(files, merge_on):
         else:
             df = df[[col for col in df.columns if col in columns_set or col == merge_on]]
         dfs.append(df)
-    if len(dfs) < 2:
+    if len(dfs) <= 2:
         st.error("Недостаточно файлов для объединения")
         return pd.DataFrame()
     merged_df = dfs[0]
