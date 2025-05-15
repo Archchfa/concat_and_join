@@ -9,19 +9,15 @@ st.title("📊 Инструмент для анализа CSV файлов")
 def load_csv(uploaded_file):
     try:
         content = uploaded_file.read().decode('utf-8')
-        uploaded_file.seek(0)  # вернём указатель обратно для повторного чтения
-
-        # Попробуем вручную определить наиболее вероятный разделитель
+        uploaded_file.seek(0)
         delimiters = [',', ';', '\t', '|']
         delimiter = max(delimiters, key=lambda d: content.split('\n')[0].count(d))
-
         df = pd.read_csv(uploaded_file, sep=delimiter, engine='python', encoding='utf-8')
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
         st.error(f"Ошибка при чтении файла {uploaded_file.name}: {e}")
         return pd.DataFrame()
-
 
 def detect_column_type(series):
     try:
@@ -33,29 +29,6 @@ def detect_column_type(series):
             return "datetime"
         except:
             return "string"
-
-def merge_files(files, merge_on):
-    dfs = []
-    columns_set = None
-    for file in files:
-        df = load_csv(file)
-        if df.empty or merge_on not in df.columns:
-            st.warning(f"Файл {file.name} пропущен (нет столбца '{merge_on}')")
-            continue
-        if columns_set is None:
-            columns_set = set(df.columns)
-        else:
-            df = df[[col for col in df.columns if col in columns_set or col == merge_on]]
-        dfs.append(df)
-    if len(dfs) <= 2:
-        st.error("Недостаточно файлов для объединения")
-        return pd.DataFrame()
-    merged_df = dfs[0]
-    for df in dfs[1:]:
-        merged_df = pd.merge(merged_df, df, on=merge_on, how="outer", suffixes=('', '_dup'))
-        merged_df = merged_df.loc[:, ~merged_df.columns.str.endswith('_dup')]
-    merged_df = merged_df.loc[:, ~merged_df.columns.str.fullmatch(r'Unnamed.*')]
-    return merged_df
 
 def filter_dataframe():
     uploaded_file = st.file_uploader("Загрузите CSV файл для фильтрации", type="csv", key="filter_file")
@@ -128,7 +101,6 @@ def plot_data(df):
         st.warning("Выберите хотя бы одну колонку для группировки")
         return
 
-    # Преобразование дат к формату YYYY-MM-DD
     for col in group_by:
         if detect_column_type(df[col]) == "datetime":
             df[col] = pd.to_datetime(df[col], errors='coerce').dt.strftime('%Y-%m-%d')
@@ -165,14 +137,53 @@ option = st.sidebar.radio("Выберите раздел", [
 
 if option == "Объединить файлы":
     uploaded_files = st.file_uploader("Загрузите CSV файлы", type="csv", accept_multiple_files=True)
+
+    def try_load_csv_for_merge(file):
+        try:
+            content = file.read().decode('utf-8')
+            file.seek(0)
+            delimiters = [',', ';', '\t', '|']
+            delimiter = max(delimiters, key=lambda d: content.split('\n')[0].count(d))
+            df = pd.read_csv(file, sep=delimiter, engine='python', encoding='utf-8')
+            df.columns = df.columns.str.strip()
+            return df, None
+        except Exception as e:
+            return None, f"{file.name}: {e}"
+
     if uploaded_files:
-        sample_df = load_csv(uploaded_files[0])
-        merge_column = st.selectbox("Выберите столбец для объединения", sample_df.columns)
-        if merge_column:
-            merged_df = merge_files(uploaded_files, merge_column)
-            st.dataframe(merged_df)
-            st.session_state['data'] = merged_df
-            download_link(merged_df, "объединенные_файлы.csv")
+        dfs = []
+        column_sets = []
+        errors = []
+        for file in uploaded_files:
+            df, error = try_load_csv_for_merge(file)
+            if error:
+                errors.append(error)
+                continue
+            dfs.append((file.name, df))
+            column_sets.append(set(df.columns))
+
+        if errors:
+            st.warning("⚠️ Ошибки при чтении файлов:")
+            for err in errors:
+                st.text(err)
+
+        if len(dfs) < 2:
+            st.error("❌ Недостаточно корректных файлов для объединения")
+        else:
+            common_columns = set.intersection(*column_sets)
+            if not common_columns:
+                st.error("❌ Нет общих столбцов во всех загруженных файлах")
+            else:
+                merge_column = st.selectbox("Выберите столбец для объединения", sorted(common_columns))
+                result = dfs[0][1]
+                for name, df in dfs[1:]:
+                    result = pd.merge(result, df, on=merge_column, how="outer", suffixes=('', '_dup'))
+                    result = result.loc[:, ~result.columns.str.endswith('_dup')]
+                result = result.loc[:, ~result.columns.str.fullmatch(r'Unnamed.*')]
+                st.success("✅ Объединение выполнено")
+                st.dataframe(result)
+                st.session_state['data'] = result
+                download_link(result, "объединенные_файлы.csv")
 
 elif option == "Фильтрация данных":
     filtered_df = filter_dataframe()
