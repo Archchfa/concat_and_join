@@ -9,8 +9,7 @@ st.title("📊 Инструмент для анализа CSV файлов")
 def load_csv(uploaded_file):
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8')
-        df.columns = df.iloc[0].astype(str).str.strip()
-        df = df[1:].reset_index(drop=True)
+        df.columns = df.columns.astype(str).str.strip()
         return df
     except Exception as e:
         st.error(f"Ошибка при чтении файла {uploaded_file.name}: {e}")
