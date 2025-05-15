@@ -8,7 +8,7 @@ st.title("📊 Инструмент для анализа CSV файлов")
 
 def load_csv(uploaded_file):
     try:
-        df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8')
+        df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8', header=None)
         df.columns = df.columns.astype(str).str.strip()
         return df
     except Exception as e:
@@ -39,7 +39,7 @@ def merge_files(files):
     df1 = df1.rename(columns={merge_col_1: "_merge_key"})
     df2 = df2.rename(columns={merge_col_2: "_merge_key"})
 
-    result = pd.merge(df1, df2, on="_merge_key", how="outer", suffixes=('', '_dup'))
+    result = pd.merge(df1, df2, on="_merge_key", how="inner", suffixes=('', '_dup'))
     result = result.loc[:, ~result.columns.str.endswith('_dup')]
     result = result.loc[:, ~result.columns.str.fullmatch(r'Unnamed.*')]
     result = result.rename(columns={"_merge_key": f"{merge_col_1}/{merge_col_2}"})
