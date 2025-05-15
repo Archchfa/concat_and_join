@@ -8,12 +8,15 @@ st.title("📊 Инструмент для анализа CSV файлов")
 def load_csv(uploaded_file):
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8', header=None)
-        # Названия столбцов — строки с номерами от 0 до n-1
-        df.columns = df.columns.astype(str).str.strip()
+        # Используем первую строку как заголовок
+        new_header = df.iloc[0].astype(str).str.strip()
+        df = df[1:].reset_index(drop=True)
+        df.columns = new_header
         return df
     except Exception as e:
         st.error(f"Ошибка при чтении файла {uploaded_file.name}: {e}")
         return pd.DataFrame()
+
 
 def merge_files(files):
     if len(files) != 2:
