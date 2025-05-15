@@ -17,38 +17,34 @@ def load_csv(uploaded_file):
         return pd.DataFrame()
 
 def merge_files(files):
-    dfs = []
-    column_sets = []
-    for file in files:
-        df = load_csv(file)
-        if df.empty:
-            st.warning(f"Файл {file.name} пропущен")
-            continue
-        dfs.append((file.name, df))
-        column_sets.append(set(df.columns))
-
-    if len(dfs) < 2:
-        st.error("❌ Недостаточно файлов для объединения")
+    if len(files) != 2:
+        st.error("❌ Для объединения нужно загрузить ровно 2 файла")
         return pd.DataFrame()
 
-    common_columns = set.intersection(*column_sets)
-    if not common_columns:
-        st.error("❌ Нет общих столбцов во всех файлах")
+    df1 = load_csv(files[0])
+    df2 = load_csv(files[1])
+
+    if df1.empty or df2.empty:
+        st.warning("Один из файлов пуст или не загружен корректно")
         return pd.DataFrame()
 
-    merge_column = st.selectbox("Выберите столбец для объединения:", sorted(common_columns))
+    st.write(f"Файл 1: {files[0].name}")
+    merge_col_1 = st.selectbox("Выберите столбец для объединения из первого файла:", df1.columns, key="merge_col_1")
 
-    for i in range(len(dfs)):
-        dfs[i] = (dfs[i][0], dfs[i][1].copy())
-        dfs[i][1][merge_column] = dfs[i][1][merge_column].astype(str)
+    st.write(f"Файл 2: {files[1].name}")
+    merge_col_2 = st.selectbox("Выберите столбец для объединения из второго файла:", df2.columns, key="merge_col_2")
 
-    result = dfs[0][1]
-    for name, df in dfs[1:]:
-        df[merge_column] = df[merge_column].astype(str)
-        result = pd.merge(result, df, on=merge_column, how="outer", suffixes=('', '_dup'))
-        result = result.loc[:, ~result.columns.str.endswith('_dup')]
+    df1[merge_col_1] = df1[merge_col_1].astype(str)
+    df2[merge_col_2] = df2[merge_col_2].astype(str)
 
+    df1 = df1.rename(columns={merge_col_1: "_merge_key"})
+    df2 = df2.rename(columns={merge_col_2: "_merge_key"})
+
+    result = pd.merge(df1, df2, on="_merge_key", how="outer", suffixes=('', '_dup'))
+    result = result.loc[:, ~result.columns.str.endswith('_dup')]
     result = result.loc[:, ~result.columns.str.fullmatch(r'Unnamed.*')]
+    result = result.rename(columns={"_merge_key": f"{merge_col_1}/{merge_col_2}"})
+
     return result
 
 def download_link(df, filename="результат.csv"):
@@ -61,7 +57,7 @@ st.sidebar.title("Навигация")
 option = st.sidebar.radio("Выберите раздел", ["Объединить файлы"], key="menu_option")
 
 if option == "Объединить файлы":
-    uploaded_files = st.file_uploader("Загрузите CSV файлы", type="csv", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Загрузите 2 CSV файла", type="csv", accept_multiple_files=True)
     if uploaded_files:
         merged_df = merge_files(uploaded_files)
         if not merged_df.empty:
