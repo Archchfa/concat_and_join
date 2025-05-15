@@ -8,14 +8,26 @@ st.title("📊 Инструмент для анализа CSV файлов")
 def load_csv(uploaded_file):
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8', header=None)
-        # Используем первую строку как заголовок
         new_header = df.iloc[0].astype(str).str.strip()
+        # Заменим пустые названия на "unknown_n"
+        new_header = [col if col and col != 'nan' else f"unknown_{i}" for i, col in enumerate(new_header)]
+        # Сделаем уникальные названия (если есть дубли)
+        seen = {}
+        unique_header = []
+        for col in new_header:
+            if col not in seen:
+                seen[col] = 0
+                unique_header.append(col)
+            else:
+                seen[col] += 1
+                unique_header.append(f"{col}_{seen[col]}")
         df = df[1:].reset_index(drop=True)
-        df.columns = new_header
+        df.columns = unique_header
         return df
     except Exception as e:
         st.error(f"Ошибка при чтении файла {uploaded_file.name}: {e}")
         return pd.DataFrame()
+
 
 
 def merge_files(files):
