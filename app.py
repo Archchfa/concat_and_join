@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from io import BytesIO
 
 st.set_page_config(page_title="Анализ CSV файлов", layout="wide")
@@ -9,6 +8,7 @@ st.title("📊 Инструмент для анализа CSV файлов")
 def load_csv(uploaded_file):
     try:
         df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8', header=None)
+        # Названия столбцов — строки с номерами от 0 до n-1
         df.columns = df.columns.astype(str).str.strip()
         return df
     except Exception as e:
@@ -28,10 +28,10 @@ def merge_files(files):
         return pd.DataFrame()
 
     st.write(f"Файл 1: {files[0].name}")
-    merge_col_1 = st.selectbox("Выберите столбец для объединения из первого файла:", df1.columns, key="merge_col_1")
+    merge_col_1 = st.selectbox("Выберите столбец для объединения из первого файла:", list(df1.columns), key="merge_col_1")
 
     st.write(f"Файл 2: {files[1].name}")
-    merge_col_2 = st.selectbox("Выберите столбец для объединения из второго файла:", df2.columns, key="merge_col_2")
+    merge_col_2 = st.selectbox("Выберите столбец для объединения из второго файла:", list(df2.columns), key="merge_col_2")
 
     df1[merge_col_1] = df1[merge_col_1].astype(str)
     df2[merge_col_2] = df2[merge_col_2].astype(str)
