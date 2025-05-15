@@ -8,12 +8,20 @@ st.title("📊 Инструмент для анализа CSV файлов")
 
 def load_csv(uploaded_file):
     try:
-        df = pd.read_csv(uploaded_file, sep=None, engine='python', encoding='utf-8')
+        content = uploaded_file.read().decode('utf-8')
+        uploaded_file.seek(0)  # вернём указатель обратно для повторного чтения
+
+        # Попробуем вручную определить наиболее вероятный разделитель
+        delimiters = [',', ';', '\t', '|']
+        delimiter = max(delimiters, key=lambda d: content.split('\n')[0].count(d))
+
+        df = pd.read_csv(uploaded_file, sep=delimiter, engine='python', encoding='utf-8')
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
         st.error(f"Ошибка при чтении файла {uploaded_file.name}: {e}")
         return pd.DataFrame()
+
 
 def detect_column_type(series):
     try:
